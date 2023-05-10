@@ -156,6 +156,7 @@ UPROGS=\
 	$U/_xargs \
 	$U/_uptime \
 
+
 ifeq ($(LAB),syscall)
 UPROGS += \
 	$U/_trace\

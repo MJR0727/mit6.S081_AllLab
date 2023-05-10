@@ -16,29 +16,35 @@ void run(char *program, char **args) {
 int main(int argc, char *argv[]){
 	char buf[2048]; // 从sdtin从读入的字符buf
 	char *p = buf, *last_p = buf; // 当前参数的结束、开始指针
-	char *argsbuf[128]; // 全部参数列表，字符串指针数组，包含 argv 传进来的参数和 stdin 读入的参数
+	char *argsbuf[128]; // 封装xargs后的命令以及从stdin读入的参数
 	char **args = argsbuf; // 指向 argsbuf 中第一个从 stdin 读入的参数
+
 	for(int i=1;i<argc;i++) {
-		// 将 argv 提供的参数加入到最终的参数列表中
+		// 将 argv 提供的·参数·加入到最终的参数列表中
 		*args = argv[i];
 		args++;
 	}
+
 	char **pa = args; // 开始读入参数
 	while(read(0, p, 1) != 0) {
 		if(*p == ' ' || *p == '\n') {
 			// 读入一个参数完成（以空格分隔，如 `echo hello world`，则 hello 和 world 各为一个参数）
 			*p = '\0';	// 将空格替换为 \0 分割开各个参数，这样可以直接使用内存池中的字符串作为参数字符串而不用额外开辟空间
 			//C语言字符串以空字符"\0"为结束标记，所以读到这里就会停止
+
+			// 直接利用p对buf进行引入，因为last_p指向stdin buf的起点，这里相当于读入一个参数或者行了进行拼接。
 			*(pa++) = last_p;
+			//指向新的位置，继续新的参数（一行）的读入
 			last_p = p+1;
-			// 这里不太懂
-			if(*p == '\n') {
-				// 读入一行完成
-				*pa = 0; // 参数列表末尾用 null 标识列表结束
-				run(argv[1], argsbuf); // 执行最后一行指令
-				pa = args; // 重置读入参数指针，准备读入下一行
-			}
 		}
+		// 这里不太懂
+		if(*p == '\n') {
+			// 读入一行完成
+			*pa = 0; // 参数列表末尾用 null 标识列表结束
+			run(argv[1], argsbuf); // 执行最后一行指令
+			pa = args; // 重置读入参数指针，准备读入下一行
+		}
+		//继续读下一位
 		p++;
 	}
 	if(pa != args) { // 如果最后一行不是空行
