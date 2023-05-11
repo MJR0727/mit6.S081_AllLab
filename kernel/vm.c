@@ -73,11 +73,18 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
 {
   if(va >= MAXVA)
     panic("walk");
-
+// 该函数采用的是RISC-V Sv39方案的页表结构，即三级页表页面。
+// 函数从第二级开始向下遍历，在每个级别中，它都会检查相应的PTE是否存在，
+// 如果存在，就把页表指针更新为下一级的页表指针；如果不存在，就根据
+// alloc参数的值来决定是否创建新页表，并将新页表的地址写入上一级的PTE中。
+// 最后，函数返回查找到的页表项的地址。
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
+    // 判断下一级页表中是否存在对应页表指针
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
+    // 如果不存在 且alloc设置为非0就创建新的页表返回
+    //alloc等于0就会返回0，操作系统会崩溃
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
@@ -314,6 +321,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
+    // 查询三级页表的指针
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
@@ -357,17 +365,21 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   uint64 n, va0, pa0;
 
   while(len > 0){
+    // 取得虚拟地址小端值，未处理前的虚拟地址是大端存储的
     va0 = PGROUNDDOWN(dstva);
+    // 根据页表指针和虚拟地址 返回真实物理地址
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
+    //如果不足一页就直接分配
     if(n > len)
       n = len;
     memmove((void *)(pa0 + (dstva - va0)), src, n);
-
+    //继续下一轮的取得空闲页
     len -= n;
     src += n;
+    //更新目标虚拟页地址
     dstva = va0 + PGSIZE;
   }
   return 0;

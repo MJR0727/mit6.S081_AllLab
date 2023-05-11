@@ -127,6 +127,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->trace_mask = 0;//为新的线程的tarce mask 进行初始化，防止混乱值与syscall mask相同而误识别。
+
   return p;
 }
 
@@ -284,16 +286,19 @@ fork(void)
   np->trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
+  //同步锁增加文件引用数量
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  //简单复制进程名字
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
-
+  // 设置进程状态
   np->state = RUNNABLE;
+  // 将追踪的mask传递给子进程。
+  np->trace_mask = p->trace_mask;
 
   release(&np->lock);
 
@@ -692,4 +697,19 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+uint64
+countActiceProcess(void)
+{
+  struct proc *p;
+  uint64 count = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state !=UNUSED) {
+      count++;
+    }
+  }
+  return count;
 }
