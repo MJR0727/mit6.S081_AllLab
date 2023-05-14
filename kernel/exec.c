@@ -21,20 +21,23 @@ exec(char *path, char **argv)
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
 
+  // 为进程加锁
   begin_op();
 
+  // 寻找文件唯一标识inode
   if((ip = namei(path)) == 0){
     end_op();
     return -1;
   }
+  // 文件加锁
   ilock(ip);
 
-  // Check ELF header
+  // Check ELF header 检查文件头
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
   if(elf.magic != ELF_MAGIC)
     goto bad;
-
+  //创建一个空的页表
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
@@ -51,6 +54,9 @@ exec(char *path, char **argv)
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
+    if(sz1>=PLIC){
+      goto bad;
+    }
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -107,6 +113,11 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
+
+  //消除旧映射
+  uvmunmap(p->kernel_pagetable,0,PGROUNDUP(oldsz)/PGSIZE,0);
+  // 将新的用户页表复制一份到进程独立的进程页表中
+  u_kvmcopymapping(pagetable,p->kernel_pagetable,0,sz);
     
   // Commit to the user image.
   oldpagetable = p->pagetable;
@@ -115,6 +126,9 @@ exec(char *path, char **argv)
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+
+  if(p->pid==1) 
+    vmprint(p->pagetable,0);
 
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 

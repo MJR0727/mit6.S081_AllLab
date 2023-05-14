@@ -92,6 +92,7 @@ int             fork(void);
 int             growproc(int);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
+void            proc_freekernelpagetable(pagetable_t);
 int             kill(int);
 struct cpu*     mycpu(void);
 struct cpu*     getmycpu(void);
@@ -108,6 +109,8 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+// int             copyin_new(pagetable_t, char, uint64, uint64);
+// int             copyinstr_new(pagetable_t, char, uint64, uint64);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -160,9 +163,11 @@ int             uartgetc(void);
 // vm.c
 void            kvminit(void);
 void            kvminithart(void);
-uint64          kvmpa(uint64);
-void            kvmmap(uint64, uint64, uint64, int);
+uint64          kvmpa(pagetable_t,uint64);
+void            kvmmap(pagetable_t,uint64, uint64, uint64, int);
 int             mappages(pagetable_t, uint64, uint64, uint64, int);
+void            kvm_map_pagetable(pagetable_t);
+pagetable_t     kvm_new_pagetable();
 pagetable_t     uvmcreate(void);
 void            uvminit(pagetable_t, uchar *, uint);
 uint64          uvmalloc(pagetable_t, uint64, uint64);
@@ -178,6 +183,16 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+void            vmprint(pagetable_t, int);
+// void            kvmfree(pagetable_t);
+void            kvm_free_kernelpgtbl(pagetable_t);
+void            freewalk(pagetable_t);
+int             u_kvmcopymapping(pagetable_t, pagetable_t,uint64, uint64);
+uint64          kvmdealloc(pagetable_t, uint64, uint64);
+// 1
+pagetable_t     kvminit_newpgtbl();
+int kvmcopymappings(pagetable_t , pagetable_t , uint64 , uint64 );
+uint64 kvmdealloc(pagetable_t , uint64 , uint64 );
 
 // plic.c
 void            plicinit(void);
