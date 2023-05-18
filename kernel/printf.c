@@ -121,6 +121,7 @@ panic(char *s)
   printf("panic: ");
   printf(s);
   printf("\n");
+  backtrace();//lab4_2
   panicked = 1; // freeze uart output from other CPUs
   for(;;)
     ;
@@ -132,3 +133,37 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+/*
+  打印返回的栈帧位置
+*/
+// void
+// backtrace()
+// {
+//   uint64 current_fp = r_fp();
+//   uint64 top = PGROUNDUP(current_fp);
+//   uint64 down = PGROUNDDOWN(current_fp);
+//   uint64 ret_add;
+//   // uint64 ret_add;
+//   // 当栈帧指针指向up就表明跳转结束
+//   while(down<=current_fp&& current_fp<top){
+//     ret_add = *(uint64*)(current_fp-8);
+//     printf("%p\n",ret_add);
+//     //下一层栈帧的栈底指针，也就是上一个跳转到的位置
+//     current_fp = *(uint64*)(current_fp-16);
+//   }
+// }
+
+// print the return address - lab4-2
+void backtrace() {
+    uint64 fp = r_fp();    // 获取当前栈帧
+    uint64 top = PGROUNDUP(fp);    // 获取用户栈最高地址
+    uint64 bottom = PGROUNDDOWN(fp);    // 获取用户栈最低地址
+    for (; 
+        fp >= bottom && fp < top;     // 终止条件
+        fp = *((uint64 *) (fp - 16))    // 获取下一栈帧
+        ) {
+        printf("%p\n", *((uint64 *) (fp - 8)));    // 输出当前栈中返回地址
+    }
+}
+

@@ -60,6 +60,7 @@ sys_sleep(void)
 
   if(argint(0, &n) < 0)
     return -1;
+
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -70,6 +71,7 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  backtrace();//lab4_2
   return 0;
 }
 
@@ -95,3 +97,38 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+  // int ticks, void (*handler)()
+  int ticks;
+  uint64 fn;
+  if(argint(0,&ticks)<0){
+    return -1;
+  }
+  if(argaddr(1,&fn)<0){
+    return -1;
+  }
+  // 赋值时钟周期、倒计时以及处理函数
+  struct proc *p = myproc();
+  p->alarm_interval = ticks;
+  p->alarm_ticks = ticks;
+  p->alarm_handler = (void(*)())fn;
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  // 返回用户PC＋４的位置
+  struct proc *p = myproc();
+  if(p->alarm_trapframe != p->trapframe + 512) {
+        return -1;
+    }
+  memmove(p->trapframe, p->alarm_trapframe, sizeof(struct trapframe));
+  p->alarm_goingoff = 0;
+  return 0;
+}
+
+

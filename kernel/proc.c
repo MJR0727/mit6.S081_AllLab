@@ -108,10 +108,19 @@ found:
   p->pid = allocpid();
 
   // Allocate a trapframe page.
+  // 栈直接申请了一页 4KB -> 4096 byte lab4_3
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     release(&p->lock);
     return 0;
   }
+
+  // if((p->alarm_trapframe=p->trapframe+512)==0||memmove(p->alarm_goingoff,p->trapframe,sizeof(struct trapframe))==0)
+  // lab4_3
+  p->alarm_goingoff = 0;
+  p->alarm_handler = 0;
+  p->alarm_interval = 0;
+  p->alarm_ticks = 0;
+  p->alarm_trapframe = 0;
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -149,6 +158,13 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  // lab4_3
+  p->alarm_goingoff= 0;
+  p->alarm_handler = 0;
+  p->alarm_interval = 0;
+  p->alarm_ticks = 0;
+  //前面kfree((void*)p->trapframe)已经将内存释放了
+  p->alarm_trapframe = 0;
   p->state = UNUSED;
 }
 

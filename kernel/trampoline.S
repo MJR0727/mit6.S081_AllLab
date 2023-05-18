@@ -26,9 +26,11 @@ uservec:
         
 	# swap a0 and sscratch
         # so that a0 is TRAPFRAME
+        # sscratch在进程创建时已经设置为拥有指向进程内陷栈（TRAPFRAME）的位置了，
+        # 用csrrw交换a0和sscratch，那么现在a0才是trapFrame指针
         csrrw a0, sscratch, a0
 
-        # save the user registers in TRAPFRAME
+        # save the user registers in TRAPFRAME 顾名思义保存内陷栈寄存器
         sd ra, 40(a0)
         sd sp, 48(a0)
         sd gp, 56(a0)
@@ -60,20 +62,22 @@ uservec:
         sd t5, 272(a0)
         sd t6, 280(a0)
 
-	# save the user a0 in p->trapframe->a0
+	# save the user a0 in p->trapframe->a0 将user空间的a0保存到t0中，又设置到内陷栈中
         csrr t0, sscratch
         sd t0, 112(a0)
 
-        # restore kernel stack pointer from p->trapframe->kernel_sp
+        # ld 将右边加载到左边
+        # 从内陷栈中加载切换到内核栈需要的寄存器
+        # restore kernel stack pointer from p->trapframe->kernel_sp 内核栈指针
         ld sp, 8(a0)
 
-        # make tp hold the current hartid, from p->trapframe->kernel_hartid
+        # make tp hold the current hartid, from p->trapframe->kernel_hartid 
         ld tp, 32(a0)
 
-        # load the address of usertrap(), p->trapframe->kernel_trap
+        # load the address of usertrap(), p->trapframe->kernel_trap usertrap()代码的地址
         ld t0, 16(a0)
 
-        # restore kernel page table from p->trapframe->kernel_satp
+        # restore kernel page table from p->trapframe->kernel_satp stap寄存器指示进程页表，切换到内核页表，那么以后的就是内核环境下了
         ld t1, 0(a0)
         csrw satp, t1
         sfence.vma zero, zero
@@ -92,16 +96,16 @@ userret:
         # a0: TRAPFRAME, in user page table.
         # a1: user page table, for satp.
 
-        # switch to the user page table.
+        # switch to the user page table. 切换回用户页表
         csrw satp, a1
         sfence.vma zero, zero
 
         # put the saved user a0 in sscratch, so we
-        # can swap it with our a0 (TRAPFRAME) in the last step.
+        # can swap it with our a0 (TRAPFRAME) in the last step. 设置用户a0寄存器到sscratch
         ld t0, 112(a0)
         csrw sscratch, t0
 
-        # restore all but a0 from TRAPFRAME
+        # restore all but a0 from TRAPFRAME 恢复所有此前在uservec中保存的寄存器，a0现在任然是内陷栈
         ld ra, 40(a0)
         ld sp, 48(a0)
         ld gp, 56(a0)
@@ -133,9 +137,9 @@ userret:
         ld t5, 272(a0)
         ld t6, 280(a0)
 
-	# restore user a0, and save TRAPFRAME in sscratch
+	# restore user a0, and save TRAPFRAME in sscratch 设置sscratch为内陷栈的指针
         csrrw a0, sscratch, a0
         
         # return to user mode and user pc.
-        # usertrapret() set up sstatus and sepc.
+        # usertrapret() set up sstatus and sepc. 返回用户空间，PC已经设置好了，所以会直接返回原先程序的下一条指令
         sret

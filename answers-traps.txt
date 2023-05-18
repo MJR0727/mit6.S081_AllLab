@@ -1,0 +1,48 @@
+Which registers contain arguments to functions? For example, which register holds 13 in main's call to `printf`?
+
+a0~a7,在asm文件中可以看到a2保存13
+
+Where is the call to function `f` in the assembly code for main? Where is the call to `g`? (Hint: the compiler may inline functions.)
+
+函数内联，直接返回了12
+
+At what address is the function `printf` located?
+
+第一个是制定了字符串的位置，第二个指定了printf的位置是ra寄存器偏移1536字节的位置，0x630=0x30+0x1536，ra寄存器的位置应该是固定的。
+
+What value is in the register `ra` just after the `jalr` to `printf` in `main`?
+
+０ｘ３０＋０ｘ４＝０ｘ３４
+
+jalr是跳转指令，他有两个参数：目标寄存器和源寄存器，它会将当前指令的地址（返回地址，就是PC值）存储到目标寄存器中，并跳转到源寄存器中存储的地址处执行代码。被调用的函数执行完毕后从目标寄存器中加载回到正确的PC位置，来返回到调用函数的下一条指令继续执行。
+
+！会返回到PC+4，因为在RISC架构中，指令执行的时候，PC会自动加上4，以便执行下一条指令。所以指令返回时要返回PC＋４的位置。
+
+因此，jalr指令的作用就是实现函数调用和函数返回。
+
+输出是什么？ 这是一个将字节映射为字符的ASCII表。
+
+输出取决于RISC-V是小端的事实。 如果RISC-V改为big-endian，那么您将i设置为什么才能产生相同的输出？ 您是否需要将57616更改为其他值？
+
+Ｈｅ１１０　Ｗｏｒｌｄｓ
+
+大端的话就要将ｉ取补才能呈现同个字符，也就是
+
+（5）运行以下代码。
+unsigned int i = 0x00646c72;
+printf("H%x Wo%s", 57616, &i);
+输出是什么？ 这是一个将字节映射为字符的ASCII表。
+
+输出取决于RISC-V是小端的事实。 如果RISC-V改为big-endian，那么您将i设置为什么才能产生相同的输出？ 您是否需要将57616更改为其他值？
+
+Ｈｅ１１０　Ｗｏｒｌｄｓ
+
+大端的话就要将ｉ取补才能呈现同个字符，也就是
+
+０ｘ７２６ｃ６４。因为低位保存数据的高位。
+
+在以下代码中，'y ='之后将输出什么？ （注意：答案不是一个特定的值。）为什么会发生？
+printf("x=%d y=%d", 3);
+
+取决于当时寄存器的值，ｙ的值应该是临时寄存器中的某个寄存器的值，如果程序中只有这条语句，那么在RISC-V架构中应该是ａ０保存字符串的地址，
+ａ１保存３，那么ａ２中的值就是ｙ要读取的数值了。

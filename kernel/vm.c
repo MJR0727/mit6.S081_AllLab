@@ -17,6 +17,7 @@ extern char trampoline[]; // trampoline.S
 
 /*
  * create a direct-map page table for the kernel.
+ 将这些内核页表必须有的代码映射到指定位置
  */
 void
 kvminit()

@@ -41,6 +41,7 @@ extern struct cpu cpus[NCPU];
 // the trapframe includes callee-saved user registers like s0-s11 because the
 // return-to-user path via usertrapret() doesn't return through
 // the entire kernel call stack.
+// (81-46+1)*8 bit/8 = 288 bytes. So 288 bytes/struct trapframe.  lab4_3
 struct trapframe {
   /*   0 */ uint64 kernel_satp;   // kernel page table
   /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
@@ -103,4 +104,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  //lab4_3
+  int alarm_interval;          //时钟周期，0 为禁用
+  void (*alarm_handler)();      //时钟回调处理函数
+  int alarm_ticks;             //下一次时钟响起前还剩下的 ticks 数
+  struct trapframe *alarm_trapframe;//时钟中断时刻的 trapframe，用于中断处理完成后恢复原程序的正常执行
+  int alarm_goingoff;               //是否已经有一个时钟回调正在执行且还未返回
+  //（用于防止在 alarm_handler 中途闹钟到期再次调用 alarm_handler，导致 alarm_trapframe 被覆盖）
 };

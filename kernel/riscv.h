@@ -319,6 +319,20 @@ sfence_vma()
   asm volatile("sfence.vma zero, zero");
 }
 
+/*
+  将寄存器s0的值移动到变量x中，并使用"="约束将x与%0绑定在一起，表示x是输出参数。其中，r表示使用一个通用寄存器来传递变量x。
+  将s0寄存器的值赋给变量x。
+  而S0在RISC-V用于存放当前的栈帧指针，故函数就是返回当前帧指针。
+*/
+
+static inline uint64
+r_fp()
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x) );
+  return x;
+}
+
 
 #define PGSIZE 4096 // bytes per page
 #define PGSHIFT 12  // bits of offset within a page
