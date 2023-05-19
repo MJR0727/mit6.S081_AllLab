@@ -5,6 +5,9 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
+
 
 /*
  * the kernel's page table.
@@ -180,10 +183,13 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
     // lab5_2
-    // if((*pte & PTE_V) == 0)
+    // 如果页表项不存在,认为是懒加载,跳过当前虚拟地址
+    if((pte = walk(pagetable, a, 0)) == 0)
+      continue;
+      // panic("uvmunmap: walk");
+    if((*pte & PTE_V) == 0)
+      continue;
       // panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
@@ -315,10 +321,14 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
+    // lab5_3
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      continue;
+      // panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0){
+      continue;
+      // panic("uvmcopy: page not present");
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -328,6 +338,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
+    
+    
   }
   return 0;
 
@@ -357,6 +369,10 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
 
+  if(uvmshouldtouch(dstva)){
+    uvmtouch(dstva);
+  }
+
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
@@ -377,10 +393,15 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
+// lab5_3 point->Handle faults on the invalid page below the user stack.
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
   uint64 n, va0, pa0;
+  
+  if(uvmshouldtouch(srcva)){
+    uvmtouch(srcva);
+  }
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
@@ -440,4 +461,69 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+//递归打印整个页表，以先序遍历的方式
+// pagetable:the pointer of the pagetable. 
+// level:the level of the pagetable,the level of the root pagetable is zero
+void 
+vmprint(pagetable_t pagetable,int depth)
+{
+  if(depth==0){
+    printf("page table %p\n",PTE2PA(pagetable[0]));
+  }
+  //遍历一级页表的512个子页表
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    //检测是否合法
+    if(pte & PTE_V){
+      //将pte的指针转为物理地址
+      uint64 child = PTE2PA(pte);
+      // .. .. ..2: pte 0x0000000021fd9c1f pa 0x0000000087f67000
+      printf("..");
+      for(int i = 0; i < depth; i++){
+        printf(" ..");
+      }
+      printf("%d: pte %p pa %p\n",i,pte,child);
+      //校验权限，如果可以读再进入,并不是叶子节点
+      if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        vmprint((pagetable_t)child,depth+1);
+      }
+    }
+  }
+  return;
+}
+
+int
+uvmshouldtouch(uint64 va){
+  pte_t *pte;
+  struct proc *p = myproc();
+  
+  return va < p->sz
+         && PGROUNDDOWN(va) != r_sp() 
+         && (((pte=walk(p->pagetable,va,0))==0) || ((*pte & PTE_V) ==0));
+          // not accessing stack guard page (it shouldn't be mapped)
+  //        //不是栈的 guard page（具体见 xv6 book，栈页的低一页故意留成不映射，
+  //       //  作为哨兵用于捕捉 stack overflow 错误。懒分配不应该给这个地址分配物理页和建立映射，而应该直接抛出异常）     
+}
+
+void
+uvmtouch(uint64 falut_vm){
+  struct proc *p = myproc();
+  char *mem = kalloc();
+  // uint64 a;
+  // uint64 newsz = p->sz;
+  // for(a = PGROUNDDOWN(falut_vm) ; a < PGROUNDDOWN(newsz); a+=PGSIZE){
+    if(mem==0){
+      printf("usertrap: can not alloc page for page fault %d\n",p->pid);
+      p->killed = 1;
+    }else{
+      memset(mem,0,PGSIZE);
+      if(mappages(p->pagetable, PGROUNDDOWN(falut_vm), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+        kfree(mem);
+        printf("usertrap: can not mappages for page fault\n");
+        p->killed = 1;
+      }
+    }
+  // }
 }

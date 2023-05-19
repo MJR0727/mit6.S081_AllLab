@@ -69,36 +69,16 @@ usertrap(void)
     // ok
   } else {
     // lab5_2
-    // 为缺页异常的进程加载页面 r_scause()等于15或者12的是缺页异常
-    uint64 cause = r_scause();
-    uint64 falut_oldvm = r_stval();//这个比p->sz小
-    uint64 a;
-    uint64 newsz = p->sz;
-    char *mem;
-    if(cause==(uint64)12||cause==(uint64)15){
-      falut_oldvm = PGROUNDDOWN(falut_oldvm);
-      for(a = falut_oldvm; a < newsz; a+=PGSIZE){
-        mem = kalloc();
-        if(mem==0){
-          // p->sz = r_stval();
-          panic("usertrap: can not alloc page for page fault");
-        }
-        memset(mem,0,PGSIZE);
-        if(mappages(p->pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-          kfree(mem);
-          p->sz = r_stval();
-          panic("usertrap: can not mappages for page fault");
-        }
-      }
-      p->trapframe->epc = r_sepc();
+    // 为缺页异常的进程加载页面 r_scause()等于15或者13的是缺页异常
+    // uint64 cause = r_scause();
+    uint64 falut_vm = r_stval();//这个比p->sz小
+    if((r_scause() == 13 || r_scause() == 15) && uvmshouldtouch(falut_vm)){
+      uvmtouch(falut_vm);
     }else{
-      printf("usertrap(): unexpected scause %p pid=%d\n",cause,p->pid);
+      printf("usertrap(): unexpected scause %p pid=%d\n",r_scause(),p->pid);
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       p->killed = 1;  
-    } 
-
-    
-    
+    }   
   }
 
   if(p->killed)
