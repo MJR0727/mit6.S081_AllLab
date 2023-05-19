@@ -30,7 +30,7 @@ uservec:
         # 用csrrw交换a0和sscratch，那么现在a0才是trapFrame指针
         csrrw a0, sscratch, a0
 
-        # save the user registers in TRAPFRAME 顾名思义保存内陷栈寄存器
+        # save the user registers in TRAPFRAME 顾名思义保存用户空间下的内陷栈寄存器
         sd ra, 40(a0)
         sd sp, 48(a0)
         sd gp, 56(a0)
