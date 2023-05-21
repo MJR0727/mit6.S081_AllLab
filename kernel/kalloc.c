@@ -8,6 +8,35 @@
 #include "spinlock.h"
 #include "riscv.h"
 #include "defs.h"
+// some new define help the function PG2PGREF
+#define pgref_qyindex(p) ((p-KERNBASE)/PGSIZE)
+#define pgref_maxindex pgref_qyindex(PHYSTOP)
+
+struct {
+  struct spinlock pgref_lock;
+  int pgref_counter[pgref_maxindex];
+}pgref;
+
+
+// // a define fuction which exchange physical address to the pte index of the pgref array.
+#define PA2PGREF(p) pgref.pgref_counter[pgref_qyindex((uint64)(p))]
+
+// // 用于访问物理页引用计数数组
+// #define PA2PGREF_ID(p) (((p)-KERNBASE)/PGSIZE)
+// #define PGREF_MAX_ENTRIES PA2PGREF_ID(PHYSTOP)
+
+// struct spinlock pgreflock; // 用于 pageref 数组的锁，防止竞态条件引起内存泄漏
+// int pageref[PGREF_MAX_ENTRIES]; // 从 KERNBASE 开始到 PHYSTOP 之间的每个物理页的引用计数
+// // note:  reference counts are incremented on fork, not on mapping. this means that
+// //        multiple mappings of the same physical page within a single process are only
+// //        counted as one reference.
+// //        this shouldn't be a problem, though. as there's no way for a user program to map
+// //        a physical page twice within it's address space in xv6.
+
+// // 通过物理地址获得引用计数
+// #define PA2PGREF(p) pgref_counter[pgref_qyindex((uint64)(p))]
+
+
 
 void freerange(void *pa_start, void *pa_end);
 
@@ -23,10 +52,13 @@ struct {
   struct run *freelist;
 } kmem;
 
+
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&pgref.pgref_lock,"pgref");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -52,14 +84,19 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  acquire(&pgref.pgref_lock);
+  if(--PA2PGREF(pa) <= 0) {
+    memset(pa, 1, PGSIZE);
 
-  r = (struct run*)pa;
+    r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
+  release(&pgref.pgref_lock);
+  
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +113,45 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    PA2PGREF(r) = 1;
+  }
   return (void*)r;
+}
+
+void
+pgrefalloc(uint64 pa){
+  acquire(&pgref.pgref_lock);
+  PA2PGREF(pa)++;
+  release(&pgref.pgref_lock);
+}
+
+void
+pgrefrelease(uint64 pa){
+  acquire(&pgref.pgref_lock);
+  if(PA2PGREF(pa)>0)
+    PA2PGREF(pa)--;
+  release(&pgref.pgref_lock);
+}
+
+
+void *kcopy_n_deref(void *pa) {
+  acquire(&pgref.pgref_lock);
+  // 如果引用数只有一，那么就证明只剩当前进程存有副本，直接返回物理页
+  if(PA2PGREF(pa) <= 1) {
+    release(&pgref.pgref_lock);
+    return pa;
+  }
+
+  uint64 newpa = (uint64)kalloc();
+  if(newpa == 0) {
+    release(&pgref.pgref_lock);
+    return 0; // out of memory
+  }
+  memmove((void*)newpa, (void*)pa, PGSIZE);
+  PA2PGREF(pa)--;
+
+  release(&pgref.pgref_lock);
+  return (void*)newpa;
 }

@@ -68,9 +68,17 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+    // lab6
+    // 如果是因为写事件,并且是COW页发生页面错误
+    // 找到目标COW 页表项的物理地址
+    if((r_scause()==13 || r_scause()==15) && checkcowpage(r_stval())){
+      // 修改父子进程pte为 wirte and no_cow  为子进程分配物理页
+      uvmcopyforcow(r_stval());
+    }else{
+      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+    }
   }
 
   if(p->killed)
