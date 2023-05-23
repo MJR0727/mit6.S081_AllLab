@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <pthread.h>
 
+// 记录了我们设置的线程数
 static int nthread = 1;
 static int round = 0;
 
@@ -20,6 +21,7 @@ barrier_init(void)
   assert(pthread_mutex_init(&bstate.barrier_mutex, NULL) == 0);
   assert(pthread_cond_init(&bstate.barrier_cond, NULL) == 0);
   bstate.nthread = 0;
+  bstate.round = 0;
 }
 
 static void 
@@ -31,6 +33,18 @@ barrier()
   // then increment bstate.round.
   //
   
+  pthread_mutex_lock(&bstate.barrier_mutex);
+  
+  if(++bstate.nthread<nthread){ // reach
+    // no reach , keep waiting
+    pthread_cond_wait(&bstate.barrier_cond,&bstate.barrier_mutex);
+  }else{
+    bstate.nthread = 0;
+    bstate.round++;
+    pthread_cond_broadcast(&bstate.barrier_cond);
+  }
+  
+  pthread_mutex_unlock(&bstate.barrier_mutex);
 }
 
 static void *
@@ -69,6 +83,7 @@ main(int argc, char *argv[])
   barrier_init();
 
   for(i = 0; i < nthread; i++) {
+    // 创建每个线程，以及指定了线程执行的方法
     assert(pthread_create(&tha[i], NULL, thread, (void *) i) == 0);
   }
   for(i = 0; i < nthread; i++) {

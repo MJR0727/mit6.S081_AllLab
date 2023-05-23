@@ -1,0 +1,2 @@
+Because when there is one thread put it's value to the entry,but this operation is cut to 3 part to the os,where is load old,link new to old addr,store new.
+If there have another thread which do the same thing like the thread we talk just now,then the the bug happen,the first value miss and it's entry was take palce by the old value.
