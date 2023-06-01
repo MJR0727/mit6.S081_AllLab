@@ -65,3 +65,6 @@
 //   TRAPFRAME (p->trapframe, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+// 参考32位x86架构，将MMAPEND 安排在内线栈下面，堆以上，往下生长。
+#define MMAPEND TRAPFRAME

@@ -128,6 +128,13 @@ found:
     return 0;
   }
 
+  struct vma *v;
+  for(int i = 0; i < VMA_ARRSIZE; i++){
+    v = &p->vmas[i];
+    v->valid = 0;
+  }
+  v = 0;
+  
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -146,6 +153,12 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if(p->vmas){
+    for(int i = 0; i < VMA_ARRSIZE; i++){
+      struct vma *v = &p->vmas[i];
+      vmaunmap(v->start,v->sz,v,p->pagetable);
+    }
+  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -157,6 +170,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  
 }
 
 // Create a user page table for a given process,
@@ -301,6 +315,14 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  for(int i = 0; i < VMA_ARRSIZE; i++){
+    struct vma *v = &p->vmas[i];
+    if(v->valid){
+      np->vmas[i] = p->vmas[i];
+      filedup(v->f);
+    }
+  }
 
   release(&np->lock);
 

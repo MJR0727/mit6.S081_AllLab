@@ -82,6 +82,19 @@ struct trapframe {
 
 enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// virtual memory areas，对应每一个映射区域的信息结构体。
+struct vma{
+  int valid;        //标识使用状态
+  int prot;         //映射文件权限，对应kernel/fcntl.h中的PORT_READ/PORT_WRITE等
+  int flags;        //映射文件判断映射是否可以回写的标志位
+  uint64 start;     //映射文件起始用户内存地址
+  uint64 sz;        //映射文件大小
+  uint64 offset;    //映射文件在inode中的偏移量
+  struct file *f;   //被映射文件结构体的指针
+};
+
+#define VMA_ARRSIZE 16
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -103,4 +116,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct vma vmas[VMA_ARRSIZE];// 映射文件结构体数组
 };

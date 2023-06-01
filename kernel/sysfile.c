@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "memlayout.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -482,5 +483,116 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_mmap(void)
+{
+  uint64 sz, offset,addr;
+  int fd,prot,flags;
+  struct file *f;
+
+  if(argaddr(0,&addr) < 0 || argaddr(1,&sz) < 0 || argint(2,&prot) < 0 
+      || argint(3,&flags) < 0 || argfd(4,&fd,&f) < 0 || argaddr(5,&offset) < 0 || sz==0){
+    // panic("mmap:input error");
+    return MAP_FAILED;
+  }
+
+  if((!f->readable && (prot & PROT_READ)) || (!f->writable && (prot & PROT_WRITE) && !(flags & MAP_PRIVATE))){
+    return MAP_FAILED;
+  }
+
+  struct proc *p = myproc();
+  struct vma *v = 0;
+  sz = PGROUNDUP(sz);
+  // 初始化MMAP结束地址，分配是从高地址向低地址分配
+  uint64 vmaend = MMAPEND;
+
+  struct vma *vv = 0;
+  for(int i = 0; i < VMA_ARRSIZE; i++){
+    vv = &p->vmas[i];
+    if( vv->valid == 0){
+      if(v==0){
+        v = &p->vmas[i];
+        v->valid = 1; 
+      }
+      // 如果即将分配的结束地址与上一个vma有交集，就更新结束地址。
+    }else if(vv->start < vmaend){
+      // 更新为上一个start对应的页的地址小端
+      vmaend = PGROUNDDOWN(vv->start);
+    }
+  }
+  // for(struct vma *i = &p->vmas[0];i < &p->vmas[VMA_ARRSIZE]; i+=sizeof(struct vma))
+
+  if(v==0){
+  // 没有空闲的vma，失败
+    return MAP_FAILED;
+  }
+
+  // 找到空闲vma，进行赋值。
+  v->f = f;
+  v->start = vmaend - sz;
+  v->prot = prot;
+  v->sz = sz;
+  v->flags = flags;
+  v->offset = offset;
+  // 对目标文件增加引用，防止使用中被驱逐
+  filedup(v->f);
+  return v->start;
+}
+
+/*
+    根据指定的用户虚拟地址和大小，去取消相应位置的映射
+    It can be a few pages,we should care of this point.
+    a solution is to do with it in the vm.c,because there 
+    can't be easily get the function take care of PTE.
+    and we are mappages and unmappages,it should be there. 
+*/
+uint64
+sys_munmap(void)
+{
+  uint64 addr,sz;
+  if(argaddr(0,&addr) < 0 || argaddr(1,&sz) < 0){
+    return -1;
+  }
+  // 1.找到vma指针
+  struct proc *p = myproc();
+  struct vma *v = findvmap(p,addr);
+
+  if(v == 0){
+    printf("vma is no map");
+    return -1;
+  }
+
+  if(v->start < addr && addr + sz < v->start + v->sz){//trying to dig a hole
+    return -1;
+  }
+  // if there were pgrounddown,the addr could be other's
+  uint64 addr_aligned = addr;
+  if(addr > v->start){
+    addr_aligned = PGROUNDUP(addr);
+  }
+
+  int nunmap = sz - (addr_aligned-addr); // nbytes to unmap
+  if(nunmap < 0)
+    nunmap = 0;
+
+  if(vmaunmap(addr_aligned,nunmap,v,p->pagetable) < 0){
+    panic("munmap: unmap fail");
+  }
+  // 2.2 mappage -> unmap ->
+  //  update vma of the proc
+  //  judge the sz -> sz == 0 -> release file ref
+  if(addr <= v->start && addr + sz > v->start){
+    v->offset += addr + sz - v->start;
+    v->start = addr + sz;
+  }
+  v->sz -= sz;
+  if(v->sz==0){
+    fileclose(v->f);
+    v->valid = 0;
+  }
+
   return 0;
 }

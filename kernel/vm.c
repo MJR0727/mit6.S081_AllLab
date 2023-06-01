@@ -5,6 +5,12 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "proc.h"
+#include "file.h"
+#include "fcntl.h"
+
 
 /*
  * the kernel's page table.
@@ -428,4 +434,116 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// 返回指定进程对应va的vma指针
+struct vma*
+findvmap(struct proc *p,uint64 va)
+{
+  struct vma *v;
+  for(int i = 0; i < VMA_ARRSIZE; i++){
+    // vma的大小并不确定
+    v = &p->vmas[i];
+    if(v->valid && v->start<=va && v->start+v->sz>va){
+      return v;
+    }
+  }
+  return 0;
+}
+
+// 根据错误的虚拟地址，对vma区域进行加载物理页。
+uint64
+vmalazytouch(uint64 addr)
+{
+  /*
+    1.判断是在那个vma
+    2.根据vma->f去到相应的inode地址进行mapping
+    3.返回映射结果
+  */
+  struct proc *p = myproc();
+  struct vma *v;
+  pagetable_t pgtbl = p->pagetable;
+
+  v = findvmap(p,addr);
+  if(v==0){
+    return -1;
+  }
+  struct inode *ip = v->f->ip;
+
+  uint64 pa = (uint64)kalloc();
+  if(pa==0){
+    panic("vmalazytouch: can no kalloc");
+  }
+  memset((void *)pa,0,PGSIZE);
+
+  // 从inode中读取数据到物理页
+  begin_op();
+  ilock(ip);
+  // 这里要注意我们的起始是在Inode中的某段开始
+  readi(ip,0,pa,v->offset+PGROUNDDOWN(addr-v->start),PGSIZE);
+  iunlock(ip);
+  end_op();
+
+  // 新申请一个页，从磁盘对应的Inode中读取数据
+
+  int perm = PTE_U;
+  if(v->prot & PROT_READ){
+    perm = perm | PTE_R;
+  }
+  if(v->prot & PROT_WRITE){
+    perm = perm | PTE_W;
+  }
+  // 一页一页地映射，避免加载太多浪费内存。
+  if(mappages(pgtbl,(uint64)addr,PGSIZE,pa, perm)<0){
+    panic("vmalazytouch: can no mappages");
+  }
+  return 0;
+}
+
+/*
+    addr: user vm addr
+    vmap: vma pointer
+
+*/
+uint64
+vmaunmap(uint64 addr,uint64 length,struct vma *v,pagetable_t pagetable){
+
+  uint64 pa,a;
+  pte_t *pte;
+  // addr可能是在某个页的中间，或者两端
+  for(a = addr; a < addr + length; a += PGSIZE){
+
+    if((pte = walk(pagetable,a,0))==0)
+      panic("vmaunmap: walk");
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("sys_munmap: not a leaf");
+
+    if((*pte & PTE_V)){
+      pa = PTE2PA(*pte);
+      // 2.取消映射，判断相应地址是否有mappage
+      // 2.1 no mappage && MAP_SHARED && EDIT -> write back -> see filewrite()
+      if((v->flags & MAP_SHARED) && (*pte & PTE_D)){
+      // do write back
+        begin_op();
+        ilock(v->f->ip);
+        // 计算每一轮的偏移量
+        uint64 aoff = a - v->start;
+        if(aoff<0){
+          // 如果映射的头部区域不足一页
+          writei(v->f->ip,0,pa+(-aoff),v->offset,PGSIZE + aoff);
+        }else if( aoff + PGSIZE > v->sz){
+          // 如果映射的尾部区域不足一页
+          writei(v->f->ip,0,pa,v->offset+aoff,v->sz - aoff);
+        }else{
+          // 完全的一页
+          writei(v->f->ip,0,pa,v->offset+aoff,PGSIZE);
+        }
+        iunlock(v->f->ip);
+        end_op();
+      }
+      kfree((void *)pa);
+      *pte = 0;
+    }
+  }
+  return 0;
 }

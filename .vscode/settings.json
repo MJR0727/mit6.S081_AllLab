@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "sleeplock.h": "c",
+        "fs.h": "c",
+        "types.h": "c",
+        "file.h": "c",
+        "fcntl.h": "c",
+        "proc.h": "c",
+        "spinlock.h": "c",
+        "defs.h": "c"
+    }
+}

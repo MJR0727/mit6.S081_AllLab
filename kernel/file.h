@@ -38,3 +38,5 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+
+#define MAP_FAILED (uint64)((char *) -1)
