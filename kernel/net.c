@@ -357,18 +357,19 @@ void net_rx(struct mbuf *m)
 {
   struct eth *ethhdr;
   uint16 type;
-
+  // 解析包，并将数据包信息返回
   ethhdr = mbufpullhdr(m, *ethhdr);
   if (!ethhdr) {
     mbuffree(m);
     return;
   }
-
+  // 解析数据包类型
   type = ntohs(ethhdr->type);
   if (type == ETHTYPE_IP)
     net_rx_ip(m);
   else if (type == ETHTYPE_ARP)
     net_rx_arp(m);
   else
+  // 未识别的数据包类型
     mbuffree(m);
 }

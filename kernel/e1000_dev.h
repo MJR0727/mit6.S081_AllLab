@@ -89,9 +89,13 @@
 
 #define DATA_MAX 1518
 
-/* Transmit Descriptor command definitions [E1000 3.3.3.1] */
+/* Transmit Descriptor command definitions [E1000 3.3.3.1] 传输描述符命令字段格式*/
 #define E1000_TXD_CMD_EOP    0x01 /* End of Packet */
-#define E1000_TXD_CMD_RS     0x08 /* Report Status */
+// 当设置时，表示构成数据包的最后一个描述符。一个或多个描述符可以用来组成一个包。
+#define E1000_TXD_CMD_RS     0x08 
+/* Report Status 以太网控制器需要上报状态信息。这种能力可以被在内
+存中检查传输描述符的软件使用，以确定哪些描述符已经完成，哪些数据包
+已经在传输中被缓冲FIFO。软件通过查看描述符状态字节并检查描述符完成(DD)位。*/
 
 /* Transmit Descriptor status definitions [E1000 3.3.3.2] */
 #define E1000_TXD_STAT_DD    0x00000001 /* Descriptor Done */
@@ -100,6 +104,7 @@
 struct tx_desc
 {
   uint64 addr;
+  // 数据包大小
   uint16 length;
   uint8 cso;
   uint8 cmd;
@@ -109,7 +114,9 @@ struct tx_desc
 };
 
 /* Receive Descriptor bit definitions [E1000 3.2.3.1] */
+// 指示硬件是否已完成描述符的使用。当与EOP一起设置，表示在主存已经收到的数据包。
 #define E1000_RXD_STAT_DD       0x01    /* Descriptor Done */
+// EOP指示这是否是传入数据包的最后一个描述符。
 #define E1000_RXD_STAT_EOP      0x02    /* End of Packet */
 
 // [E1000 3.2.3]
@@ -118,8 +125,8 @@ struct rx_desc
   uint64 addr;       /* Address of the descriptor's data buffer */
   uint16 length;     /* Length of data DMAed into data buffer */
   uint16 csum;       /* Packet checksum */
-  uint8 status;      /* Descriptor status */
-  uint8 errors;      /* Descriptor Errors */
+  uint8 status;      /* Descriptor status 状态描述 */
+  uint8 errors;      /* Descriptor Errors 错误描述 */
   uint16 special;
 };
 
